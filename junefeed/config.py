@@ -1,6 +1,5 @@
 import os
 import yaml
-import json
 
 
 class Config:
@@ -35,13 +34,6 @@ class Config:
     def _write_config(self) -> None:
         with open(self.config_file, 'w') as file:
             yaml.dump(self._config, file)
-
-
-    def __getitem__(self, key):
-        return self._config.get(key, None)
-
-    def __repr__(self):
-        return str(self._config)
 
 
 config = Config()
