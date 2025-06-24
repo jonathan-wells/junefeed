@@ -1,6 +1,9 @@
+import asyncio
+
 from textual.app import App, ComposeResult
 from textual.widgets import Static, Header
 from textual.screen import Screen
+from textual.containers import ScrollableContainer
 from textual import events
 
 from junefeed.feed import EntryCollection, Feed
@@ -42,38 +45,51 @@ class EntryCollectionScreen(Screen):
         self.sub_title = 'entries'
         self.widgets = []
         self._idx = 0
-        for i, entry in enumerate(self.entries, 1):
-            widget = Static(f'[#31748f bold]{i:>4}.[/] {entry.title}')
+        for i, entry in enumerate(self.entries, 0):
+            widget = Static(f'[#6e6a86]{i:>4}.[/] {entry.title}')
             widget.styles.text_wrap = 'nowrap'
             widget.styles.text_overflow = 'clip'
-            widget.styles.color = 'grey'
+            widget.styles.color = '#908caa'
             self.widgets.append(widget)
-        self.widgets[0].styles.color = 'white'
+        self.widgets[0].styles.color = '#f6c177'
+        yield ScrollableContainer()
         yield Header(icon=b'\xF0\x9F\x90\xB1'.decode('utf8'))
         yield from self.widgets 
  
     def on_mount(self):
         self.screen.show_horizontal_scrollbar = True
         self.screen.styles.scrollbar_size_horizontal = 10
-        self.screen.styles.scrollbar_size_vertical = 0 
-
+        self.screen.styles.scrollbar_size_vertical = 0
+        self.nwidgets = len(self.widgets)
+    
     def on_key(self, event: events.Key) -> None:
+
         if event.key == 'h':
             self.scroll_left()
         elif event.key == 'j':
             self._idx += 1
-            if self._idx >= 12:
+            if self._idx >= 11:
                 self.scroll_down()
-            self.widgets[self._idx-1].styles.color = 'grey'
-            self.widgets[self._idx].styles.color = 'white'
+            self._highlight_current()
         elif event.key == 'k':
             self._idx -= 1
-            self.widgets[self._idx].styles.color = 'white'
-            self.widgets[self._idx+1].styles.color = 'grey'
-            self.scroll_up()
+            if self._idx < self.nwidgets - 12:
+                self.scroll_up()
+            self._highlight_current()
 
         elif event.key == 'l':
             self.scroll_right()
+
+    def _highlight_current(self):
+        if self._idx < 0:
+            self._idx = 0
+        elif self._idx >= self.nwidgets - 1:
+            self._idx = self.nwidgets - 1
+            self.widgets[self._idx-1].styles.color = '#908caa' 
+        else:
+            self.widgets[self._idx-1].styles.color = '#908caa' 
+            self.widgets[self._idx+1].styles.color = '#908caa'
+        self.widgets[self._idx].styles.color = '#f6c177'
 
 class SingleEntryScreen(Screen):
     
