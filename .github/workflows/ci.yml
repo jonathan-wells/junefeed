@@ -1,3 +1,4 @@
+yaml
 name: Continuous Integration
 
 on:
@@ -11,16 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v6
         with:
           version: "latest"
 
-      -name: sync uv
+      - name: Sync uv
         run: uv sync
       
-      - name: lint code
-         run: uv run ruff check .
+      - name: Lint code
+        run: uv run ruff check .
 
-      - name: check formatting
+      - name: Check formatting
         run: uv run ruff format --check .
