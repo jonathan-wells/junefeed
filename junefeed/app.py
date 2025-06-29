@@ -8,7 +8,6 @@ from junefeed.config import config
 
 
 class FeedScreen(Screen):
-    
     def __init__(self):
         super().__init__()
         self.feeds = [Feed(url, name) for (name, url) in config.feeds.items()]
@@ -22,10 +21,9 @@ class FeedScreen(Screen):
             widget.styles.text_overflow = 'clip'
             self.widgets.append(widget)
         yield from self.widgets
-    
+
 
 class EntryCollectionScreen(Screen):
-    
     def __init__(self, from_cached=True):
         super().__init__()
         if from_cached:
@@ -35,7 +33,7 @@ class EntryCollectionScreen(Screen):
         self.read_entries = []
         self.build_widgets()
         self.idx = 0
-    
+
     @property
     def nwidgets(self):
         return len(self.widgets)
@@ -50,7 +48,7 @@ class EntryCollectionScreen(Screen):
         else:
             widget.styles.color = '#6e6a86'
         return widget
-    
+
     def build_widgets(self):
         self._feedpad = max(len(feed) for feed in config.feeds.keys())
         self.widgets = []
@@ -60,8 +58,8 @@ class EntryCollectionScreen(Screen):
 
     def compose(self) -> ComposeResult:
         self.screen.styles.background = '#191724'
-        yield from self.widgets 
- 
+        yield from self.widgets
+
     def on_mount(self):
         self.screen.show_horizontal_scrollbar = True
         self.screen.styles.scrollbar_size_horizontal = 10
@@ -84,7 +82,7 @@ class EntryCollectionScreen(Screen):
             self.highlight_current()
         elif event.key == 'l':
             self.scroll_right()
- 
+
     def highlight_current(self):
         if self.nwidgets == 0:
             return
@@ -92,10 +90,10 @@ class EntryCollectionScreen(Screen):
             self.idx = 0
         elif self.idx >= self.nwidgets - 1:
             self.idx = self.nwidgets - 1
-            self.widgets[self.idx-1].styles.color = '#908caa' 
+            self.widgets[self.idx - 1].styles.color = '#908caa'
         else:
-            self.widgets[self.idx-1].styles.color = '#908caa' 
-            self.widgets[self.idx+1].styles.color = '#908caa'
+            self.widgets[self.idx - 1].styles.color = '#908caa'
+            self.widgets[self.idx + 1].styles.color = '#908caa'
         self.widgets[self.idx].styles.color = '#f6c177'
 
     def mark_read(self):
@@ -106,12 +104,12 @@ class EntryCollectionScreen(Screen):
         self.read_entries.append(entry)
         self.widgets.pop(self.idx).remove()
         self.highlight_current()
-        
+
+
 class SingleEntryScreen(Screen):
-    
     def __init__(self, entries: list[Entry] = [], idx: int = 0):
         super().__init__()
-        if entries == []: 
+        if entries == []:
             self.entries = EntryCollection.from_cached().entries
         else:
             self.entries = entries
@@ -124,12 +122,11 @@ class SingleEntryScreen(Screen):
 
 
 class Junefeed(App):
-    
     BINDINGS = [
         ('c', 'push_screen("entry_collection")'),
         ('f', 'push_screen("feeds")'),
     ]
-    
+
     def on_mount(self):
         self.install_screen(EntryCollectionScreen(), 'entry_collection')
         self.install_screen(FeedScreen(), 'feeds')
@@ -141,16 +138,20 @@ class Junefeed(App):
 
     async def switch_to_entry(self):
         entry_collection = self.screen
-        assert isinstance(entry_collection, EntryCollectionScreen), type(entry_collection)
-        single_entry = SingleEntryScreen(entry_collection.entries.entries, entry_collection.idx)
+        assert isinstance(entry_collection, EntryCollectionScreen), type(
+            entry_collection
+        )
+        single_entry = SingleEntryScreen(
+            entry_collection.entries.entries, entry_collection.idx
+        )
         await self.push_screen(single_entry)
-    
+
     def open_entry_link(self):
         entry = self.screen
         assert isinstance(entry, SingleEntryScreen)
         entry = entry.entries[entry.idx]
         self.open_url(entry.link)
-            
+
     async def on_key(self, event: events.Key) -> None:
         # Universal keys:
         if event.key == 'r':
@@ -172,4 +173,3 @@ class Junefeed(App):
         elif isinstance(self.screen, Feed):
             if event.key == 'q':
                 self.exit()
-

@@ -3,15 +3,16 @@ import yaml
 
 
 class Config:
-    
     config_file = os.environ['HOME'] + '/.local/state/junefeed/config.yaml'
     history_file = os.environ['HOME'] + '/.local/state/junefeed/history.json'
-    
+
     def __init__(self):
         with open(self.config_file, 'r') as config_file:
             self._config = yaml.safe_load(config_file)
-        self.feeds = {feed['name']: feed['url'] for feed in self._config.get('feeds', [])}
-    
+        self.feeds = {
+            feed['name']: feed['url'] for feed in self._config.get('feeds', [])
+        }
+
     def add_feed(self, name: str, url: str) -> None:
         if name in self.feeds:
             raise KeyError(f'Feed "{name}" already exists')
