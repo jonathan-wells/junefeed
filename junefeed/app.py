@@ -9,55 +9,122 @@ from junefeed.feed import EntryCollection, Entry, Feed
 from junefeed.config import config
 
 
-class FeedScreen(Screen):
-    def __init__(self):
-        super().__init__()
-        self.feeds = [Feed(url, name) for (name, url) in config.feeds.items()]
+class Junefeed(App):
+    """Junefeed is a terminal RSS reader.
 
-    def compose(self) -> ComposeResult:
-        self.screen.styles.background = '#191724'
-        self.widgets = []
-        for feed in self.feeds:
-            widget = Static(str(feed))
-            widget.styles.text_wrap = 'nowrap'
-            widget.styles.text_overflow = 'clip'
-            self.widgets.append(widget)
-        yield from self.widgets
+    This class provides the core functionality for the Junefeed app. The user interface relies on
+    three different screens: EntryCollectionScreen, which serves all of the entries for the feeds
+    you have subscribed to. FeedScreen, which presents a simple list of subscribed feeds, and
+    SingleEntryScreen, which displays more information on a given entry.
+    """
+
+    BINDINGS = [
+        ('c', 'push_screen("entry_collection")'),
+        ('f', 'push_screen("feeds")'),
+    ]
+
+    def on_mount(self) -> None:
+        self.install_screen(EntryCollectionScreen(), 'entry_collection')
+        self.install_screen(FeedScreen(), 'feeds')
+        self.push_screen('entry_collection')
+
+    async def refresh_feeds(self) -> None:
+        """Fetches new data from the subscribed feeds."""
+        entry_collection = EntryCollectionScreen(from_cached=False)
+        await self.push_screen(entry_collection)
+
+    async def switch_to_entry(self) -> None:
+        """Switches to the currently active, highlighted entry."""
+        entry_collection = self.screen
+        assert isinstance(entry_collection, EntryCollectionScreen), type(
+            entry_collection
+        )
+        current_entry = entry_collection.current_entry
+        if current_entry is not None:
+            await self.push_screen(SingleEntryScreen(current_entry))
+
+    def open_entry_link(self) -> None:
+        """From a SingleEntryScreen, opens the associated link in the default web browser."""
+        entry_screen = self.screen
+        assert isinstance(entry_screen, SingleEntryScreen)
+        self.open_url(entry_screen.entry.link)
+
+    async def on_key(self, event: events.Key) -> None:
+        """Key-bindings for interacting with the Junefeed app.
+
+        Attributes:
+            event: an individual key-press event.
+        """
+        if event.key == 'r':
+            await self.refresh_feeds()
+        if isinstance(self.screen, SingleEntryScreen):
+            if event.key == 'c':
+                await self.pop_screen()
+            elif event.key == 'o':
+                self.open_entry_link()
+            elif event.key == 'q':
+                await self.pop_screen()
+        elif isinstance(self.screen, EntryCollectionScreen):
+            if event.key == 'o':
+                await self.switch_to_entry()
+            elif event.key == 'm':
+                self.screen.mark_read()
+            elif event.key == 'q':
+                self.exit()
+        elif isinstance(self.screen, FeedScreen):
+            if event.key == 'q':
+                await self.pop_screen()
 
 
 class EntryCollectionScreen(Screen):
+    """The primary screen for browsing feed data.
+
+    EntryCollectionScreen is the landing screen upon opening the app. It provides functionality for
+    scrolling through reads, marking them as read or unread, and searching for specific keywords.
+
+    Attributes:
+        entry_collection: an EntryCollection instance containing all data from feeds.
+        read_entries: an EntryCollection instance containing entries marked as read.
+        nwidgets: the number of currently availabe widgets.
+        current_entry: the currently highlighted entry.
+    """
+
     def __init__(self, from_cached=True):
+        """Initialize new EntryCollectionScreen instance."""
         super().__init__()
         if from_cached:
             self.entry_collection = EntryCollection.from_cached()
         else:
             self.entry_collection = EntryCollection.from_feeds(config.feeds)
-        self.read_entries = []
+        self.read_entries = EntryCollection([])
 
     @property
     def nwidgets(self) -> int:
+        """Return the number of currently available widgets."""
         return len(self.widgets)
-     
+
     @property
     def current_entry(self) -> Optional['Entry']:
+        """Return the currently active/highlighted entry."""
         return self[self.idx]
 
-    def _entry_to_widget(self, entry, idx):
-        pad = self._feedpad
-        widget = Static(f'[#6e6a86]{idx:>4}. {entry.feed:>{pad}}[/] {entry.title}')
-        widget.styles.text_wrap = 'nowrap'
-        widget.styles.text_overflow = 'clip'
-        if not entry.is_read:
-            widget.styles.color = '#908caa'
-        else:
-            widget.styles.color = '#6e6a86'
-        return widget
-
     def build_widgets(self):
-        self._feedpad = max(len(feed) for feed in config.feeds.keys())
+        def entry_to_widget(entry, idx):
+            widget = Static(
+                f'[#6e6a86]{idx:>4}. {entry.feed:>{feedpad}}[/] {entry.title}'
+            )
+            widget.styles.text_wrap = 'nowrap'
+            widget.styles.text_overflow = 'clip'
+            if not entry.is_read:
+                widget.styles.color = '#908caa'
+            else:
+                widget.styles.color = '#6e6a86'
+            return widget
+
+        feedpad = max(len(feed) for feed in config.feeds.keys())
         self.widgets = []
         for i, entry in enumerate(self.entry_collection, 1):
-            widget = self._entry_to_widget(entry, i)
+            widget = entry_to_widget(entry, i)
             self.widgets.append(widget)
 
     def compose(self) -> ComposeResult:
@@ -66,7 +133,7 @@ class EntryCollectionScreen(Screen):
         self.idx = 0
         yield from self.widgets
 
-    def on_mount(self):
+    def on_mount(self) -> None:
         self.screen.show_horizontal_scrollbar = True
         self.screen.styles.scrollbar_size_horizontal = 10
         self.screen.styles.scrollbar_size_vertical = 0
@@ -84,7 +151,7 @@ class EntryCollectionScreen(Screen):
                 self.scroll_up()
             self.highlight_current()
 
-    def highlight_current(self):
+    def highlight_current(self) -> None:
         if self.nwidgets == 0:
             return
         if self.idx < 0:
@@ -105,7 +172,7 @@ class EntryCollectionScreen(Screen):
         self.read_entries.append(entry)
         self.widgets.pop(self.idx).remove()
         self.highlight_current()
-    
+
     def __getitem__(self, idx) -> Optional['Entry']:
         """Get entry by index."""
         if len(self.entry_collection) == 0:
@@ -125,52 +192,17 @@ class SingleEntryScreen(Screen):
         yield self.widget
 
 
-class Junefeed(App):
-    BINDINGS = [
-        ('c', 'push_screen("entry_collection")'),
-        ('f', 'push_screen("feeds")'),
-    ]
+class FeedScreen(Screen):
+    def __init__(self):
+        super().__init__()
+        self.feeds = [Feed(url, name) for (name, url) in config.feeds.items()]
 
-    def on_mount(self) -> None:
-        self.install_screen(EntryCollectionScreen(), 'entry_collection')
-        self.install_screen(FeedScreen(), 'feeds')
-        self.push_screen('entry_collection')
-
-    async def refresh_feeds(self) -> None:
-        entry_collection = EntryCollectionScreen(from_cached=False)
-        await self.push_screen(entry_collection)
-
-    async def switch_to_entry(self) -> None:
-        entry_collection = self.screen
-        assert isinstance(entry_collection, EntryCollectionScreen), type(
-            entry_collection
-        )
-        single_entry = SingleEntryScreen(entry_collection.current_entry)
-        await self.push_screen(single_entry)
-
-    def open_entry_link(self) -> None:
-        entry_screen = self.screen
-        assert isinstance(entry_screen, SingleEntryScreen)
-        self.open_url(entry_screen.entry.link)
-
-    async def on_key(self, event: events.Key) -> None:
-        # Universal keys:
-        if event.key == 'r':
-            await self.refresh_feeds()
-        if isinstance(self.screen, SingleEntryScreen):
-            if event.key == 'c':
-                await self.pop_screen()
-            elif event.key == 'o':
-                self.open_entry_link()
-            elif event.key == 'q':
-                await self.pop_screen()
-        elif isinstance(self.screen, EntryCollectionScreen):
-            if event.key == 'o':
-                await self.switch_to_entry()
-            elif event.key == 'm':
-                self.screen.mark_read()
-            elif event.key == 'q':
-                self.exit()
-        elif isinstance(self.screen, FeedScreen):
-            if event.key == 'q':
-                await self.pop_screen()
+    def compose(self) -> ComposeResult:
+        self.screen.styles.background = '#191724'
+        self.widgets = []
+        for feed in self.feeds:
+            widget = Static(str(feed))
+            widget.styles.text_wrap = 'nowrap'
+            widget.styles.text_overflow = 'clip'
+            self.widgets.append(widget)
+        yield from self.widgets

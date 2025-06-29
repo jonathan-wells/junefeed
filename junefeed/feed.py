@@ -24,11 +24,11 @@ class Entry:
     """
 
     def __init__(
-        self, 
-        feed: str, 
-        title: str, 
-        summary: str, 
-        link: str, 
+        self,
+        feed: str,
+        title: str,
+        summary: str,
+        link: str,
         date: str,
         is_read: bool,
     ) -> None:
@@ -126,6 +126,9 @@ class EntryCollection:
             json.dump(
                 [entry.json_serialize() for entry in self.entries], file, indent=2
             )
+
+    def append(self, entry: Entry) -> None:
+        self.entries.append(entry)
 
     def __iter__(self):
         return iter(self.entries)
