@@ -1,8 +1,15 @@
 import os
 import json
+from typing import TypeVar, Type
+
 from html.parser import HTMLParser
 import feedparser
+
 from junefeed.config import config
+
+
+EntryType = TypeVar('EntryType', bound='Entry')
+EntryCollectionType = TypeVar('EntryCollectionType', bound='EntryCollection')
 
 
 class Entry:
@@ -17,18 +24,25 @@ class Entry:
     """
 
     def __init__(
-        self, feed: str, title: str, summary: str, link: str, is_read: bool
+        self, 
+        feed: str, 
+        title: str, 
+        summary: str, 
+        link: str, 
+        date: str,
+        is_read: bool,
     ) -> None:
         """Initialize Entry instance."""
         self.feed = feed
         self.title = title
         self.summary = self._parse_html(summary).strip()
+        self.date = date
         self.link = link
         self.is_read = is_read
 
     @classmethod
-    def from_json_obj(cls, entry: dict):
-        """Returns an Entry instance from a corresponding JSON object.
+    def from_json_obj(cls: Type[EntryType], entry: dict) -> EntryType:
+        """Intialize Entry from a JSON object.
 
         Arguments:
             entry: a dictionary containing data from a parsed JSON entry.
@@ -37,8 +51,9 @@ class Entry:
         title = entry['title']
         summary = entry.get('summary', '')
         link = entry.get('link', '')
+        date = entry.get('date', '')
         is_read = entry.get('is_read', False)
-        return cls(feed, title, summary, link, is_read)
+        return cls(feed, title, summary, link, date, is_read)
 
     def json_serialize(self) -> dict:
         """Return entry in JSON-compatible dictionary format."""
@@ -85,7 +100,7 @@ class EntryCollection:
         self.entries = entries
 
     @classmethod
-    def from_cached(cls):
+    def from_cached(cls: Type[EntryCollectionType]) -> EntryCollectionType:
         """Initialize EntryCollection from locally cached RSS feed data."""
         if os.path.exists(config.history_file):
             with open(config.history_file, 'r') as file:
@@ -94,14 +109,16 @@ class EntryCollection:
             raise FileNotFoundError(f'History file not found: {config.history_file}')
 
     @classmethod
-    def from_feeds(cls, feeds: dict):
+    def from_feeds(
+        cls: Type[EntryCollectionType], feeds: dict[str, str]
+    ) -> EntryCollectionType:
         """Initialize EntryCollection directly from RSS feeds."""
         entries = []
         for name, url in feeds.items():
             entries.extend(Feed(url, name).entries)
-            self = cls(entries)
-            self.cache_entries()
-            return self
+        self = cls(entries)
+        self.cache_entries()
+        return self
 
     def cache_entries(self) -> None:
         """Write entry data to history file."""
@@ -112,6 +129,9 @@ class EntryCollection:
 
     def __iter__(self):
         return iter(self.entries)
+
+    def __len__(self) -> int:
+        return len(self.entries)
 
 
 class Feed:

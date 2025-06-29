@@ -3,6 +3,8 @@ from textual.widgets import Static
 from textual.screen import Screen
 from textual import events
 
+from typing import Optional
+
 from junefeed.feed import EntryCollection, Entry, Feed
 from junefeed.config import config
 
@@ -27,16 +29,18 @@ class EntryCollectionScreen(Screen):
     def __init__(self, from_cached=True):
         super().__init__()
         if from_cached:
-            self.entries = EntryCollection.from_cached()
+            self.entry_collection = EntryCollection.from_cached()
         else:
-            self.entries = EntryCollection.from_feeds(config.feeds)
+            self.entry_collection = EntryCollection.from_feeds(config.feeds)
         self.read_entries = []
-        self.build_widgets()
-        self.idx = 0
 
     @property
-    def nwidgets(self):
+    def nwidgets(self) -> int:
         return len(self.widgets)
+     
+    @property
+    def current_entry(self) -> Optional['Entry']:
+        return self[self.idx]
 
     def _entry_to_widget(self, entry, idx):
         pad = self._feedpad
@@ -52,12 +56,14 @@ class EntryCollectionScreen(Screen):
     def build_widgets(self):
         self._feedpad = max(len(feed) for feed in config.feeds.keys())
         self.widgets = []
-        for i, entry in enumerate(self.entries, 1):
+        for i, entry in enumerate(self.entry_collection, 1):
             widget = self._entry_to_widget(entry, i)
             self.widgets.append(widget)
 
     def compose(self) -> ComposeResult:
         self.screen.styles.background = '#191724'
+        self.build_widgets()
+        self.idx = 0
         yield from self.widgets
 
     def on_mount(self):
@@ -67,21 +73,16 @@ class EntryCollectionScreen(Screen):
         self.highlight_current()
 
     def on_key(self, event: events.Key) -> None:
-        if event.key == 'h':
-            self.scroll_left()
-        elif event.key == 'j':
+        if event.key == 'j':
             self.idx += 1
             if self.idx >= 11:
                 self.scroll_down()
             self.highlight_current()
         elif event.key == 'k':
-            print('k')
             self.idx -= 1
-            if self.idx < self.nwidgets - 12:
+            if self.idx <= self.nwidgets - 11:
                 self.scroll_up()
             self.highlight_current()
-        elif event.key == 'l':
-            self.scroll_right()
 
     def highlight_current(self):
         if self.nwidgets == 0:
@@ -99,26 +100,29 @@ class EntryCollectionScreen(Screen):
     def mark_read(self):
         if self.nwidgets == 0:
             return
-        entry = self.entries.entries.pop(self.idx)
+        entry = self.entry_collection.entries.pop(self.idx)
         entry.mark_read()
         self.read_entries.append(entry)
         self.widgets.pop(self.idx).remove()
         self.highlight_current()
+    
+    def __getitem__(self, idx) -> Optional['Entry']:
+        """Get entry by index."""
+        if len(self.entry_collection) == 0:
+            return None
+        else:
+            return self.entry_collection.entries[idx]
 
 
 class SingleEntryScreen(Screen):
-    def __init__(self, entries: list[Entry] = [], idx: int = 0):
+    def __init__(self, entry: Entry):
         super().__init__()
-        if entries == []:
-            self.entries = EntryCollection.from_cached().entries
-        else:
-            self.entries = entries
-        self.widgets = [Static(str(entry)) for entry in self.entries]
-        self.idx = idx
+        self.entry = entry
 
     def compose(self) -> ComposeResult:
         self.screen.styles.background = '#191724'
-        yield self.widgets[self.idx]
+        self.widget = Static(str(self.entry))
+        yield self.widget
 
 
 class Junefeed(App):
@@ -127,30 +131,27 @@ class Junefeed(App):
         ('f', 'push_screen("feeds")'),
     ]
 
-    def on_mount(self):
+    def on_mount(self) -> None:
         self.install_screen(EntryCollectionScreen(), 'entry_collection')
         self.install_screen(FeedScreen(), 'feeds')
         self.push_screen('entry_collection')
 
-    async def refresh_feeds(self):
+    async def refresh_feeds(self) -> None:
         entry_collection = EntryCollectionScreen(from_cached=False)
         await self.push_screen(entry_collection)
 
-    async def switch_to_entry(self):
+    async def switch_to_entry(self) -> None:
         entry_collection = self.screen
         assert isinstance(entry_collection, EntryCollectionScreen), type(
             entry_collection
         )
-        single_entry = SingleEntryScreen(
-            entry_collection.entries.entries, entry_collection.idx
-        )
+        single_entry = SingleEntryScreen(entry_collection.current_entry)
         await self.push_screen(single_entry)
 
-    def open_entry_link(self):
-        entry = self.screen
-        assert isinstance(entry, SingleEntryScreen)
-        entry = entry.entries[entry.idx]
-        self.open_url(entry.link)
+    def open_entry_link(self) -> None:
+        entry_screen = self.screen
+        assert isinstance(entry_screen, SingleEntryScreen)
+        self.open_url(entry_screen.entry.link)
 
     async def on_key(self, event: events.Key) -> None:
         # Universal keys:
@@ -170,6 +171,6 @@ class Junefeed(App):
                 self.screen.mark_read()
             elif event.key == 'q':
                 self.exit()
-        elif isinstance(self.screen, Feed):
+        elif isinstance(self.screen, FeedScreen):
             if event.key == 'q':
-                self.exit()
+                await self.pop_screen()
