@@ -30,7 +30,8 @@ class Entry:
         summary: str,
         link: str,
         date: str,
-        is_read: bool,
+        is_read: bool = False,
+        current_index: int = 0,
     ) -> None:
         """Initialize Entry instance."""
         self.feed = feed
@@ -39,6 +40,7 @@ class Entry:
         self.date = date
         self.link = link
         self.is_read = is_read
+        self.current_index = current_index
 
     @classmethod
     def from_json_obj(cls: Type[EntryType], entry: dict) -> EntryType:
@@ -93,11 +95,15 @@ class EntryCollection:
 
     Attributes:
         entries: a list of Entry instances
+        read_entries: a list of Entrys marked as read
     """
 
-    def __init__(self, entries: list['Entry']) -> None:
+    def __init__(
+        self, entries: list['Entry'], read_entries: list['Entry'] = []
+    ) -> None:
         """Initialize EntryCollection."""
         self.entries = entries
+        # self.read_entries = read_entries
 
     @classmethod
     def from_cached(cls: Type[EntryCollectionType]) -> EntryCollectionType:
@@ -127,14 +133,46 @@ class EntryCollection:
                 [entry.json_serialize() for entry in self.entries], file, indent=2
             )
 
+    # def mark_read(self, entry_index: int) -> None:
+    #     ul = len(self.entries)
+    #     if entry_index >= len(self.entries):
+    #         raise IndexError(f'entry_index {entry_index} out of range for unread_list of len {ul}')
+    #     entry = self.entries.pop(entry_index)
+    #     entry.mark_read()
+    #     self.read_entries.append(entry)
+    #
+    # def mark_unread(self, entry_index: int) -> None:
+    #     ul = len(self.entries)
+    #     if entry_index >= len(self.entries):
+    #         raise IndexError(f'entry_index {entry_index} out of range for unread_list of len {ul}')
+    #     entry = self.read_entries.pop(entry_index)
+    #     entry.mark_unread()
+    #     self.entries.append(entry)
+
     def append(self, entry: Entry) -> None:
         self.entries.append(entry)
+
+    def pop(self, index: int = -1) -> Entry:
+        nents = len(self.entries)
+        if index >= len(self.entries):
+            raise IndexError(
+                f'Index {index} out of range for unread_list of len {nents}'
+            )
+        return self.entries.pop(index)
 
     def __iter__(self):
         return iter(self.entries)
 
     def __len__(self) -> int:
         return len(self.entries)
+
+    def __getitem__(self, index: int) -> Entry:
+        nents = len(self.entries)
+        if index >= len(self.entries):
+            raise IndexError(
+                f'Index {index} out of range for unread_list of len {nents}'
+            )
+        return self.entries[index]
 
 
 class Feed:
