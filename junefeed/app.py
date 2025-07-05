@@ -12,10 +12,11 @@ from junefeed.config import config
 class Junefeed(App):
     """Junefeed is a terminal RSS reader.
 
-    This class provides the core functionality for the Junefeed app. The user interface relies on
-    three different screens: EntryCollectionScreen, which serves all of the entries for the feeds
-    you have subscribed to. FeedScreen, which presents a simple list of subscribed feeds, and
-    SingleEntryScreen, which displays more information on a given entry.
+    This class provides the core functionality for the Junefeed app. The user
+    interface relies on three different screens: EntryCollectionScreen, which
+    serves all of the entries for the feeds you have subscribed to. FeedScreen,
+    which presents a simple list of subscribed feeds, and SingleEntryScreen,
+    which displays more information on a given entry.
     """
 
     BINDINGS = [
@@ -44,10 +45,23 @@ class Junefeed(App):
             await self.push_screen(SingleEntryScreen(current_entry))
 
     def open_entry_link(self) -> None:
-        """From a SingleEntryScreen, opens the associated link in the default web browser."""
+        """From a SingleEntryScreen, opens the associated link in the default
+        web browser."""
         entry_screen = self.screen
         assert isinstance(entry_screen, SingleEntryScreen)
         self.open_url(entry_screen.entry.link)
+
+    async def toggle_read(self):
+        current_ec_screen = self.screen
+        assert isinstance(current_ec_screen, EntryCollectionScreen)
+        entry_collection_screen = EntryCollectionScreen(
+            current_ec_screen.entry_collection,
+            display_read = not current_ec_screen.display_read,
+            idx = current_ec_screen.idx
+        )
+        self.pop_screen()
+        self.push_screen(entry_collection_screen)
+
 
     async def on_key(self, event: events.Key) -> None:
         """Key-bindings for interacting with the Junefeed app.
@@ -69,38 +83,41 @@ class Junefeed(App):
                 await self.switch_to_entry()
             elif event.key == 'm':
                 self.screen.mark_read()
+            elif event.key == 'u':
+                self.screen.mark_unread()
             elif event.key == 't':
-                if self.screen.display_read:
-                    self.pop_screen()
-                else:
-                    entry_collection = self.screen.entry_collection
-                    self.push_screen(
-                        EntryCollectionScreen(entry_collection, display_read=True)
-                    )
+                await self.toggle_read()
             elif event.key == 'q':
+                self.screen.entry_collection.cache_entries()
                 self.exit()
         elif isinstance(self.screen, FeedScreen):
             if event.key == 'q':
+                self.get_screen(
+                    'entry_collection',
+                    EntryCollectionScreen
+                ).entry_collection.cache_entries()
                 await self.pop_screen()
 
 
 class EntryCollectionScreen(Screen):
     """The primary screen for browsing feed data.
 
-    EntryCollectionScreen is the landing screen upon opening the app. It provides functionality for
-    scrolling through reads, marking them as read or unread, and searching for specific keywords.
+    EntryCollectionScreen is the landing screen upon opening the app. It
+    provides functionality for scrolling through reads, marking them as read or
+    unread, and searching for specific keywords.
 
     Attributes:
-        entry_collection: an EntryCollection instance containing all data from feeds.
-        read_entry_collection: an EntryCollection instance containing entries marked as read.
-        nwidgets: the number of currently availabe widgets.
-        current_entry: the currently highlighted entry.
+        entry_collection: an EntryCollection instance containing all data from
+        feeds. read_entry_collection: an EntryCollection instance containing
+        entries marked as read. nwidgets: the number of currently availabe
+        widgets. current_entry: the currently highlighted entry.
     """
 
     def __init__(
         self,
         entry_collection: Optional['EntryCollection'] = None,
         display_read: bool = False,
+        idx: int = 0,
     ) -> None:
         """Initialize new EntryCollectionScreen instance."""
         super().__init__()
@@ -109,7 +126,14 @@ class EntryCollectionScreen(Screen):
         else:
             self.entry_collection = entry_collection
         self.display_read = display_read
-        self._feedpad = max(len(feed) for feed in config.feeds.keys())
+        if not self.display_read:
+            self.visible_entries = EntryCollection(
+                [e for e in self.entry_collection if not e.is_read]
+            )
+        else:
+            self.visible_entries = self.entry_collection
+        self.idx = idx
+        self._feedpad = max(len(feed) for feed in config.feeds.keys()) + 2
 
     @property
     def nwidgets(self) -> int:
@@ -117,20 +141,17 @@ class EntryCollectionScreen(Screen):
         return len(self.widgets)
 
     @property
-    def current_entry(self) -> Optional['Entry']:
+    def current_entry(self) -> Entry:
         """Return the currently active/highlighted entry."""
-        return self[self.idx]
+        entry = self[self.idx]
+        if entry is None:
+            raise ValueError(f'No entry found at index {self.idx}')
+        return entry
 
-    def entry_to_widget(self, entry, idx):
-        widget = Static(
-            f'[#6e6a86]{idx:>4}. {entry.feed:>{self._feedpad}}[/] {entry.title}'
-        )
+    def entry_to_widget(self, entry):
+        widget = Static(entry.oneliner(self._feedpad))
         widget.styles.text_wrap = 'nowrap'
         widget.styles.text_overflow = 'clip'
-        if not entry.is_read:
-            widget.styles.color = '#908caa'
-        else:
-            widget.styles.color = '#6e6a86'
         return widget
 
     def build_widgets(self, entry_collection: EntryCollection) -> list:
@@ -138,14 +159,13 @@ class EntryCollectionScreen(Screen):
         for i, entry in enumerate(entry_collection, 1):
             if entry.is_read and self.display_read is False:
                 continue
-            widget = self.entry_to_widget(entry, i)
+            widget = self.entry_to_widget(entry)
             widgets.append(widget)
         return widgets
 
     def compose(self) -> ComposeResult:
         self.screen.styles.background = '#191724'
-        self.widgets = self.build_widgets(self.entry_collection)
-        self.idx = 0
+        self.widgets = self.build_widgets(self.visible_entries)
         yield from self.widgets
 
     def on_mount(self) -> None:
@@ -167,7 +187,7 @@ class EntryCollectionScreen(Screen):
                 self.scroll_up()
             self.highlight_current()
 
-    def highlight_current(self) -> None:
+    def highlight_current_old(self) -> None:
         """Highlight the currently active entry."""
         if self.nwidgets == 0:
             return
@@ -175,33 +195,69 @@ class EntryCollectionScreen(Screen):
             self.idx = 0
         elif self.idx >= self.nwidgets - 1:
             self.idx = self.nwidgets - 1
-            self.widgets[self.idx - 1].styles.color = '#908caa'
+            above = self[self.idx-1]
+            if above is None:
+                return
+            self.widgets[self.idx - 1].update(above.oneliner(self._feedpad))
         else:
-            self.widgets[self.idx - 1].styles.color = '#908caa'
-            self.widgets[self.idx + 1].styles.color = '#908caa'
-        self.widgets[self.idx].styles.color = '#f6c177'
+            above = self[self.idx-1]
+            if above is None:
+                raise ValueError(f'No entry found at index {self.idx - 1}')
+            below = self[self.idx+1]
+            if below is None:
+                raise ValueError(f'No entry found at index {self.idx + 1}')
+            self.widgets[self.idx - 1].update(above.oneliner(self._feedpad))
+            self.widgets[self.idx + 1].update(below.oneliner(self._feedpad))
+        current = self.current_entry
+        self.widgets[self.idx].update(current.oneliner(self._feedpad, True))
+
+    def highlight_current(self) -> None:
+        """Highlight the currently active entry."""
+        if self.nwidgets == 0:  # i.e. nothing to highlight
+            return
+        # Tether index to bounds of list
+        if self.idx < 0:
+            self.idx = 0
+        elif self.idx >= self.nwidgets - 1:
+            self.idx = self.nwidgets - 1
+
+        above = self[self.idx-1]
+        below = self[self.idx+1]
+        current = self.current_entry  # Can never be None or will raise error? Test this!
+
+        self.widgets[self.idx].update(current.oneliner(self._feedpad, True))
+        if above is not None:
+            self.widgets[self.idx - 1].update(above.oneliner(self._feedpad))
+        if below is not None:
+            self.widgets[self.idx + 1].update(below.oneliner(self._feedpad))
 
     def mark_read(self) -> None:
         """Mark the currently highlighted entry as read."""
-        entry = self.entry_collection[self.idx]
-        entry.mark_read()
-        self.widgets[self.idx].remove()
+        self.current_entry.mark_read()
+        if self.display_read:
+            self.widgets[self.idx].update(self.current_entry.oneliner(self._feedpad))
+        else:
+            self.widgets[self.idx].remove()
+            self.idx += 1
+            self.highlight_current()
+            # self.widgets.pop(self.idx)
+            # self.visible_entries.pop(self.idx)
+
         self.highlight_current()
 
-    def toggle_unread(self) -> None:
-        for i, entry in enumerate(self.entry_collection):
-            if not entry.is_read:
-                continue
-            widget = self.entry_to_widget(entry, i)
-            self.widgets[i].mount(widget)
-            # self.widgets.insert(i, widget)
+    def mark_unread(self) -> None:
+        """Mark the currently highlighted entry as read."""
+        self.current_entry.mark_unread()
+        # self.highlight_current()
 
     def __getitem__(self, idx) -> Optional['Entry']:
         """Get entry by index."""
-        if len(self.entry_collection) == 0:
+        if len(self.visible_entries) == 0:
+            return None
+        elif idx >= len(self.visible_entries):
             return None
         else:
-            return self.entry_collection.entries[idx]
+            return self.visible_entries.entries[idx]
 
 
 class SingleEntryScreen(Screen):

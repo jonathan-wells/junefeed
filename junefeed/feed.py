@@ -31,7 +31,6 @@ class Entry:
         link: str,
         date: str,
         is_read: bool = False,
-        current_index: int = 0,
     ) -> None:
         """Initialize Entry instance."""
         self.feed = feed
@@ -40,7 +39,6 @@ class Entry:
         self.date = date
         self.link = link
         self.is_read = is_read
-        self.current_index = current_index
 
     @classmethod
     def from_json_obj(cls: Type[EntryType], entry: dict) -> EntryType:
@@ -64,6 +62,7 @@ class Entry:
             'title': self.title,
             'summary': self.summary,
             'link': self.link,
+            'is_read': self.is_read,
         }
         return json_obj
 
@@ -74,6 +73,16 @@ class Entry:
     def mark_unread(self) -> None:
         """Mark entry instance as unread."""
         self.is_read = False
+
+    def oneliner(self, pad: int = 0, highlighted: bool = False) -> str:
+        """Return single-line string reflecting read/unread status."""
+        if highlighted:
+            dotfeed = '\u2022 ' + self.feed
+            return f'[#f6c177]{dotfeed:>{pad}}:  {self.title}[/]'
+        if not self.is_read:
+            return f'[#908caa]{self.feed:>{pad}}: [#e0def4] {self.title}[/]'
+        else:
+            return f'[#908caa]{self.feed:>{pad}}: [#6e6a86] {self.title}[/]'
 
     def _parse_html(self, data: str) -> str:
         """Converts input HTML data into Rich-formatted string."""
@@ -133,22 +142,6 @@ class EntryCollection:
                 [entry.json_serialize() for entry in self.entries], file, indent=2
             )
 
-    # def mark_read(self, entry_index: int) -> None:
-    #     ul = len(self.entries)
-    #     if entry_index >= len(self.entries):
-    #         raise IndexError(f'entry_index {entry_index} out of range for unread_list of len {ul}')
-    #     entry = self.entries.pop(entry_index)
-    #     entry.mark_read()
-    #     self.read_entries.append(entry)
-    #
-    # def mark_unread(self, entry_index: int) -> None:
-    #     ul = len(self.entries)
-    #     if entry_index >= len(self.entries):
-    #         raise IndexError(f'entry_index {entry_index} out of range for unread_list of len {ul}')
-    #     entry = self.read_entries.pop(entry_index)
-    #     entry.mark_unread()
-    #     self.entries.append(entry)
-
     def append(self, entry: Entry) -> None:
         self.entries.append(entry)
 
@@ -161,7 +154,7 @@ class EntryCollection:
         return self.entries.pop(index)
 
     def __iter__(self):
-        return iter(self.entries)
+        return EntryCollectionIterator(self.entries)
 
     def __len__(self) -> int:
         return len(self.entries)
@@ -173,6 +166,24 @@ class EntryCollection:
                 f'Index {index} out of range for unread_list of len {nents}'
             )
         return self.entries[index]
+
+
+class EntryCollectionIterator:
+
+    def __init__(self, entries: list['Entry'] = []):
+        self.entries = entries
+        self.nentries = len(entries)
+        self.index = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.index >= self.nentries:
+            raise StopIteration
+        entry = self.entries[self.index]
+        self.index += 1
+        return entry
 
 
 class Feed:
