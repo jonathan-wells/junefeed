@@ -78,11 +78,15 @@ class Entry:
         """Return single-line string reflecting read/unread status."""
         if highlighted:
             dotfeed = '\u2022 ' + self.feed
-            return f'[#f6c177]{dotfeed:>{pad}}:  {self.title}[/]'
-        if not self.is_read:
-            return f'[#908caa]{self.feed:>{pad}}: [#e0def4] {self.title}[/]'
+            if not self.is_read:
+                return f'[#f6c177]{dotfeed:>{pad}}:  {self.title}[/]'
+            else:
+                return f'[#ebbcba]{dotfeed:>{pad}}:  {self.title}[/]'
         else:
-            return f'[#908caa]{self.feed:>{pad}}: [#6e6a86] {self.title}[/]'
+            if not self.is_read:
+                return f'[#908caa]{self.feed:>{pad}}: [#e0def4] {self.title}[/]'
+            else:
+                return f'[#908caa]{self.feed:>{pad}}: [#6e6a86] {self.title}[/]'
 
     def _parse_html(self, data: str) -> str:
         """Converts input HTML data into Rich-formatted string."""
@@ -107,12 +111,9 @@ class EntryCollection:
         read_entries: a list of Entrys marked as read
     """
 
-    def __init__(
-        self, entries: list['Entry'], read_entries: list['Entry'] = []
-    ) -> None:
+    def __init__(self, entries: list['Entry']) -> None:
         """Initialize EntryCollection."""
         self.entries = entries
-        # self.read_entries = read_entries
 
     @classmethod
     def from_cached(cls: Type[EntryCollectionType]) -> EntryCollectionType:
@@ -169,7 +170,6 @@ class EntryCollection:
 
 
 class EntryCollectionIterator:
-
     def __init__(self, entries: list['Entry'] = []):
         self.entries = entries
         self.nentries = len(entries)

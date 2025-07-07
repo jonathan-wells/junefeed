@@ -52,16 +52,53 @@ class Junefeed(App):
         self.open_url(entry_screen.entry.link)
 
     async def toggle_read(self):
+        """Toggles display of entries marked as read."""
         current_ec_screen = self.screen
         assert isinstance(current_ec_screen, EntryCollectionScreen)
+        new_idx = current_ec_screen.idx
+
+        # Upon toggling, idx needs to be shifted to account for hidden rows.
+        # First, handle the simpler case: displaying_read -> hiding_read.
+        if current_ec_screen.display_read:
+            num_hidden = 0
+            for j in range(new_idx + 1):
+                if current_ec_screen.entry_collection.entries[j].is_read:
+                    num_hidden -= 1
+            new_idx += num_hidden
+        # Handle the opposite. This works by counting the total number of
+        # entries in each block of hidden entries, then adds to the index of
+        # the highlighted line.
+        else:
+            j = 0
+            while j <= new_idx:
+                if not current_ec_screen.entry_collection.entries[j].is_read:
+                    j += 1
+                    continue
+                # Begin counting number of entries in current block
+                k = j
+                num_hidden = 0
+                while current_ec_screen.entry_collection.entries[k].is_read:
+                    num_hidden += 1
+                    k += 1
+                j += num_hidden
+                new_idx += num_hidden
+
+        # Instantiate the toggled screen and replace current.
         entry_collection_screen = EntryCollectionScreen(
             current_ec_screen.entry_collection,
-            display_read = not current_ec_screen.display_read,
-            idx = current_ec_screen.idx
+            display_read=not current_ec_screen.display_read,
+            idx=new_idx,
         )
-        self.pop_screen()
-        self.push_screen(entry_collection_screen)
 
+        self.pop_screen()
+        await self.push_screen(entry_collection_screen)
+        entry_collection_screen.widgets[0].scroll_to_widget(
+            entry_collection_screen.widgets[
+                min(entry_collection_screen.nwidgets - 1, new_idx + 15)
+            ],
+            animate=False,
+            immediate=True,
+        )
 
     async def on_key(self, event: events.Key) -> None:
         """Key-bindings for interacting with the Junefeed app.
@@ -93,8 +130,7 @@ class Junefeed(App):
         elif isinstance(self.screen, FeedScreen):
             if event.key == 'q':
                 self.get_screen(
-                    'entry_collection',
-                    EntryCollectionScreen
+                    'entry_collection', EntryCollectionScreen
                 ).entry_collection.cache_entries()
                 await self.pop_screen()
 
@@ -156,7 +192,7 @@ class EntryCollectionScreen(Screen):
 
     def build_widgets(self, entry_collection: EntryCollection) -> list:
         widgets = []
-        for i, entry in enumerate(entry_collection, 1):
+        for entry in entry_collection:
             if entry.is_read and self.display_read is False:
                 continue
             widget = self.entry_to_widget(entry)
@@ -173,6 +209,9 @@ class EntryCollectionScreen(Screen):
         self.screen.styles.scrollbar_size_horizontal = 10
         self.screen.styles.scrollbar_size_vertical = 0
         self.highlight_current()
+
+    def go_to(self):
+        self.set_focus(self.widgets[self.idx])
 
     def on_key(self, event: events.Key) -> None:
         """Key-bindings for EntryCollectionScreen."""
@@ -195,15 +234,15 @@ class EntryCollectionScreen(Screen):
             self.idx = 0
         elif self.idx >= self.nwidgets - 1:
             self.idx = self.nwidgets - 1
-            above = self[self.idx-1]
+            above = self[self.idx - 1]
             if above is None:
                 return
             self.widgets[self.idx - 1].update(above.oneliner(self._feedpad))
         else:
-            above = self[self.idx-1]
+            above = self[self.idx - 1]
             if above is None:
                 raise ValueError(f'No entry found at index {self.idx - 1}')
-            below = self[self.idx+1]
+            below = self[self.idx + 1]
             if below is None:
                 raise ValueError(f'No entry found at index {self.idx + 1}')
             self.widgets[self.idx - 1].update(above.oneliner(self._feedpad))
@@ -221,10 +260,11 @@ class EntryCollectionScreen(Screen):
         elif self.idx >= self.nwidgets - 1:
             self.idx = self.nwidgets - 1
 
-        above = self[self.idx-1]
-        below = self[self.idx+1]
-        current = self.current_entry  # Can never be None or will raise error? Test this!
+        above = self[self.idx - 1]
+        below = self[self.idx + 1]
+        current = self.current_entry
 
+        # If idx is at start of list, do not update above, and vice versa.
         self.widgets[self.idx].update(current.oneliner(self._feedpad, True))
         if above is not None:
             self.widgets[self.idx - 1].update(above.oneliner(self._feedpad))
@@ -238,17 +278,14 @@ class EntryCollectionScreen(Screen):
             self.widgets[self.idx].update(self.current_entry.oneliner(self._feedpad))
         else:
             self.widgets[self.idx].remove()
-            self.idx += 1
-            self.highlight_current()
-            # self.widgets.pop(self.idx)
-            # self.visible_entries.pop(self.idx)
-
+            self.widgets.pop(self.idx)
+            self.visible_entries.pop(self.idx)
         self.highlight_current()
 
     def mark_unread(self) -> None:
         """Mark the currently highlighted entry as read."""
         self.current_entry.mark_unread()
-        # self.highlight_current()
+        self.highlight_current()
 
     def __getitem__(self, idx) -> Optional['Entry']:
         """Get entry by index."""
