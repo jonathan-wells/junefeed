@@ -1,9 +1,11 @@
+from typing import Optional
+from asyncio import sleep
+
 from textual.app import App, ComposeResult
 from textual.widgets import Static
 from textual.screen import Screen
-from textual import events
+from textual import events, work
 
-from typing import Optional
 
 from junefeed.feed import EntryCollection, Entry, Feed
 from junefeed.config import config
@@ -24,15 +26,24 @@ class Junefeed(App):
         ('f', 'push_screen("feeds")'),
     ]
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         self.install_screen(EntryCollectionScreen(), 'entry_collection')
         self.install_screen(FeedScreen(), 'feeds')
+        self._refreshed_entry_collection = None
+        self._prefetch_refreshed()
         self.push_screen('entry_collection')
+
+    @work(exclusive=True)
+    async def _prefetch_refreshed(self):
+        self._refreshed_entry_collection = EntryCollection.from_feeds()
 
     async def refresh_feeds(self) -> None:
         """Fetches new data from the subscribed feeds."""
-        entry_collection = EntryCollectionScreen()
-        await self.push_screen(entry_collection)
+        while self._refreshed_entry_collection is None:
+            await sleep(0.1)
+        new_ec_screen = EntryCollectionScreen(await self._refreshed_entry_collection)
+        self.push_screen(new_ec_screen)
+        self._prefetch_refreshed()
 
     async def switch_to_entry(self) -> None:
         """Switches to the currently active, highlighted entry."""
@@ -57,17 +68,16 @@ class Junefeed(App):
         assert isinstance(current_ec_screen, EntryCollectionScreen)
         new_idx = current_ec_screen.idx
 
-        # Upon toggling, idx needs to be shifted to account for hidden rows.
-        # First, handle the simpler case: displaying_read -> hiding_read.
+        # Upon toggling:
+        # If displaying read, move idx to the closest preceding unread entry.
         if current_ec_screen.display_read:
             num_hidden = 0
             for j in range(new_idx + 1):
                 if current_ec_screen.entry_collection.entries[j].is_read:
                     num_hidden -= 1
             new_idx += num_hidden
-        # Handle the opposite. This works by counting the total number of
-        # entries in each block of hidden entries, then adds to the index of
-        # the highlighted line.
+
+        # Else, add all previously read entries to the current index.
         else:
             j = 0
             while j <= new_idx:
@@ -125,6 +135,9 @@ class Junefeed(App):
             elif event.key == 't':
                 await self.toggle_read()
             elif event.key == 'q':
+                while self._refreshed_entry_collection is None:
+                    await sleep(0.1)
+                await self._refreshed_entry_collection
                 self.screen.entry_collection.cache_entries()
                 self.exit()
         elif isinstance(self.screen, FeedScreen):
@@ -170,6 +183,9 @@ class EntryCollectionScreen(Screen):
             self.visible_entries = self.entry_collection
         self.idx = idx
         self._feedpad = max(len(feed) for feed in config.feeds.keys()) + 2
+
+    def _refresh_feeds(self):
+        return EntryCollection.from_feeds(config.feeds)
 
     @property
     def nwidgets(self) -> int:
@@ -217,14 +233,15 @@ class EntryCollectionScreen(Screen):
         """Key-bindings for EntryCollectionScreen."""
         if event.key == 'j':
             self.idx += 1
+            self.highlight_current()
             if self.idx >= 15:
                 self.scroll_down()
-            self.highlight_current()
+
         elif event.key == 'k':
             self.idx -= 1
+            self.highlight_current()
             if self.idx <= self.nwidgets - 15:
                 self.scroll_up()
-            self.highlight_current()
 
     def highlight_current_old(self) -> None:
         """Highlight the currently active entry."""

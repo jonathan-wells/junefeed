@@ -77,7 +77,8 @@ class Entry:
     def oneliner(self, pad: int = 0, highlighted: bool = False) -> str:
         """Return single-line string reflecting read/unread status."""
         if highlighted:
-            dotfeed = '\u2022 ' + self.feed
+            # dotfeed = '\u2022 ' + self.feed
+            dotfeed = '󰄛 ' + self.feed
             if not self.is_read:
                 return f'[#f6c177]{dotfeed:>{pad}}:  {self.title}[/]'
             else:
@@ -125,16 +126,21 @@ class EntryCollection:
             raise FileNotFoundError(f'History file not found: {config.history_file}')
 
     @classmethod
-    def from_feeds(
-        cls: Type[EntryCollectionType], feeds: dict[str, str]
-    ) -> EntryCollectionType:
+    async def from_feeds(cls: Type[EntryCollectionType]) -> EntryCollectionType:
         """Initialize EntryCollection directly from RSS feeds."""
-        entries = []
-        for name, url in feeds.items():
-            entries.extend(Feed(url, name).entries)
-        self = cls(entries)
-        self.cache_entries()
-        return self
+        cached_collection = EntryCollection.from_cached()
+        await cached_collection.refresh()
+        return cls(cached_collection.entries)
+
+    async def refresh(self) -> None:
+        """Fetch new entries from source feeds."""
+        cached_entry_titles = [entry.title for entry in self.entries]
+        for name, url in config.feeds.items():
+            # Reverse list so most recent items in feed are displayed first.
+            for entry in Feed(url, name).entries[::-1]:
+                if entry.title in cached_entry_titles:
+                    continue
+                self.entries.insert(0, entry)
 
     def cache_entries(self) -> None:
         """Write entry data to history file."""
