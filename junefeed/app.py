@@ -29,21 +29,22 @@ class Junefeed(App):
     async def on_mount(self) -> None:
         self.install_screen(EntryCollectionScreen(), 'entry_collection')
         self.install_screen(FeedScreen(), 'feeds')
-        self._refreshed_entry_collection = None
         self._prefetch_refreshed()
         self.push_screen('entry_collection')
 
     @work(exclusive=True)
     async def _prefetch_refreshed(self):
-        self._refreshed_entry_collection = EntryCollection.from_feeds()
+        self._refreshed_ec_screen = None
+        refreshed_entry_collection = EntryCollection.from_feeds()
+        self._refreshed_ec_screen = EntryCollectionScreen(
+            await refreshed_entry_collection
+        )
 
     async def refresh_feeds(self) -> None:
         """Fetches new data from the subscribed feeds."""
-        while self._refreshed_entry_collection is None:
-            await sleep(0.1)
-        new_ec_screen = EntryCollectionScreen(await self._refreshed_entry_collection)
-        self.push_screen(new_ec_screen)
-        self._prefetch_refreshed()
+        while self._refreshed_ec_screen is None:
+            await sleep(0.1)  # Wait for prefetch to complete
+        self.push_screen(self._refreshed_ec_screen)
 
     async def switch_to_entry(self) -> None:
         """Switches to the currently active, highlighted entry."""
@@ -84,7 +85,7 @@ class Junefeed(App):
                 if not current_ec_screen.entry_collection.entries[j].is_read:
                     j += 1
                     continue
-                # Begin counting number of entries in current block
+                # Begin counting number of get_entries in current block
                 k = j
                 num_hidden = 0
                 while current_ec_screen.entry_collection.entries[k].is_read:
@@ -135,9 +136,6 @@ class Junefeed(App):
             elif event.key == 't':
                 await self.toggle_read()
             elif event.key == 'q':
-                while self._refreshed_entry_collection is None:
-                    await sleep(0.1)
-                await self._refreshed_entry_collection
                 self.screen.entry_collection.cache_entries()
                 self.exit()
         elif isinstance(self.screen, FeedScreen):
@@ -183,9 +181,6 @@ class EntryCollectionScreen(Screen):
             self.visible_entries = self.entry_collection
         self.idx = idx
         self._feedpad = max(len(feed) for feed in config.feeds.keys()) + 2
-
-    def _refresh_feeds(self):
-        return EntryCollection.from_feeds(config.feeds)
 
     @property
     def nwidgets(self) -> int:

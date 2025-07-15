@@ -1,6 +1,7 @@
 import os
 import json
 from typing import TypeVar, Type
+import asyncio
 
 from html.parser import HTMLParser
 import feedparser
@@ -137,7 +138,9 @@ class EntryCollection:
         cached_entry_titles = [entry.title for entry in self.entries]
         for name, url in config.feeds.items():
             # Reverse list so most recent items in feed are displayed first.
-            for entry in Feed(url, name).entries[::-1]:
+            feed = Feed(url, name)
+            feed_entries = await feed.get_entries()
+            for entry in feed_entries[::-1]:
                 if entry.title in cached_entry_titles:
                     continue
                 self.entries.insert(0, entry)
@@ -207,11 +210,10 @@ class Feed:
         self.name = name
         self._entries: list['Entry'] = []
 
-    @property
-    def entries(self) -> list['Entry']:
+    async def get_entries(self) -> list['Entry']:
         """Returns list of entries populated with data from feed."""
         if len(self._entries) == 0:
-            rawfeed = feedparser.parse(self.url)
+            rawfeed = await asyncio.to_thread(feedparser.parse, self.url)
             if rawfeed.bozo:
                 raise ValueError(f'Could not access feed "{self.url}"')
             for entry in rawfeed.entries:
@@ -223,9 +225,9 @@ class Feed:
         """Return Rich-formatted string of feed."""
         return f'[#31748f italic]{self.name:>10}[/]: {self.url}'
 
-    def __iter__(self):
+    async def __iter__(self):
         """Return iterator over entries."""
-        return iter(self.entries)
+        return iter(await self.get_entries())
 
 
 class RSSEntryParser(HTMLParser):
