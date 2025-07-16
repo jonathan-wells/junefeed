@@ -63,6 +63,7 @@ class Entry:
             'title': self.title,
             'summary': self.summary,
             'link': self.link,
+            'date': self.date,
             'is_read': self.is_read,
         }
         return json_obj
@@ -103,6 +104,12 @@ class Entry:
         title = f'[#eb6f92 bold]{self.title:>10}[/]\n'
         link = f'[#c4a7e7 italic underline]{self.link}[/]\n'
         return f'{title}\n{link}\n{self.summary}'
+
+    def __eq__(self, other):
+        for attr, value in vars(self).items():
+            if vars(other)[attr] != value:
+                return False
+        return True
 
 
 class EntryCollection:

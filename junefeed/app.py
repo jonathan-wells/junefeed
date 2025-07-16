@@ -44,7 +44,10 @@ class Junefeed(App):
         """Fetches new data from the subscribed feeds."""
         while self._refreshed_ec_screen is None:
             await sleep(0.1)  # Wait for prefetch to complete
+        self.pop_screen()
         self.push_screen(self._refreshed_ec_screen)
+        self._refreshed_ec_screen = None
+        self._prefetch_refreshed()
 
     async def switch_to_entry(self) -> None:
         """Switches to the currently active, highlighted entry."""
