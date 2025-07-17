@@ -1,4 +1,4 @@
-name: Continuous Integration
+name: Testing
 
 on:
   push:
@@ -21,9 +21,6 @@ jobs:
 
       - name: Sync uv
         run: uv sync
-      
-      - name: Lint code
-        run: uv run ruff check .
 
-      - name: Check formatting
-        run: uv run ruff format --check .
+      - name: Run unit tests
+        run: uv run pytest ./tests
