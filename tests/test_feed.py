@@ -1,15 +1,33 @@
 import pytest
+import tempfile
+import os
+import yaml
 from junefeed.feed import Entry
+from junefeed.config import Config
 
 
-@pytest.fixture
-def mock_config(tmp_path, monkeypatch):
-    config_dir = tmp_path / './local' / 'state' / 'junefeed'
-    config_dir.makedir(parents=True)
-    config_file = config_dir / 'config.yaml'
-    config_file.write_text('feeds: []')
-    monkeypatch.setenv('HOME', str(tmp_path))
-    yield config_file
+@pytest.fixture(autouse=True, scope='module')
+def mock_config_file():
+    """Fixture that provides a temporary config file and patches Config.config_file"""
+    test_config = {
+        'feeds': [
+            {'name': 'nature', 'url': 'https://www.nature.com/nature.rss'},
+        ]
+    }
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as file:
+        yaml.dump(test_config, file)
+        temp_config_path = file.name
+
+    # Store original and patch
+    original_config_file = Config.config_file
+    Config.config_file = temp_config_path
+
+    yield  # Execute the tests with the patched config file
+
+    # Cleanup
+    Config.config_file = original_config_file
+    os.unlink(temp_config_path)
 
 
 @pytest.fixture
