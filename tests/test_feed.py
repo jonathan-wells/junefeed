@@ -3,6 +3,16 @@ from junefeed.feed import Entry
 
 
 @pytest.fixture
+def mock_config(tmp_path, monkeypatch):
+    config_dir = tmp_path / './local' / 'state' / 'junefeed'
+    config_dir.makedir(parents=True)
+    config_file = config_dir / 'config.yaml'
+    config_file.write_text('feeds: []')
+    monkeypatch.setenv('HOME', str(tmp_path))
+    yield config_file
+
+
+@pytest.fixture
 def entry():
     return Entry(
         feed='nature',
