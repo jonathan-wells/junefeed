@@ -18,7 +18,7 @@ class Config:
             raise KeyError(f'Feed "{name}" already exists')
         self.feeds[name] = url
         self._config['feeds'].append({'name': name, 'url': url})
-        self._write_config()
+        self.write_config()
 
     def remove_feed(self, name: str):
         if name not in self.feeds:
@@ -30,11 +30,14 @@ class Config:
                 break
             idx += 1
         self._config['feeds'].pop(idx)
-        self._write_config()
+        self.write_config()
 
-    def _write_config(self) -> None:
+    def write_config(self):
         with open(self.config_file, 'w') as file:
             yaml.dump(self._config, file)
 
 
-config = Config()
+def get_config():
+    """Get the Config instance."""
+    config = Config()
+    return config

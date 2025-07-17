@@ -6,7 +6,7 @@ import asyncio
 from html.parser import HTMLParser
 import feedparser
 
-from junefeed.config import config
+from junefeed.config import get_config
 
 
 EntryType = TypeVar('EntryType', bound='Entry')
@@ -128,11 +128,13 @@ class EntryCollection:
     @classmethod
     def from_cached(cls: Type[EntryCollectionType]) -> EntryCollectionType:
         """Initialize EntryCollection from locally cached RSS feed data."""
-        if os.path.exists(config.history_file):
-            with open(config.history_file, 'r') as file:
+        if os.path.exists(get_config().history_file):
+            with open(get_config().history_file, 'r') as file:
                 return cls([Entry.from_json_obj(entry) for entry in json.load(file)])
         else:
-            raise FileNotFoundError(f'History file not found: {config.history_file}')
+            raise FileNotFoundError(
+                f'History file not found: {get_config().history_file}'
+            )
 
     @classmethod
     async def from_feeds(cls: Type[EntryCollectionType]) -> EntryCollectionType:
@@ -144,7 +146,7 @@ class EntryCollection:
     async def refresh(self) -> None:
         """Fetch new entries from source feeds."""
         cached_entry_titles = [entry.title for entry in self.entries]
-        for name, url in config.feeds.items():
+        for name, url in get_config().feeds.items():
             # Reverse list so most recent items in feed are displayed first.
             feed = Feed(url, name)
             feed_entries = await feed.get_entries()
@@ -155,7 +157,7 @@ class EntryCollection:
 
     def cache_entries(self) -> None:
         """Write entry data to history file."""
-        with open(config.history_file, 'w') as file:
+        with open(get_config().history_file, 'w') as file:
             json.dump(
                 [entry.json_serialize() for entry in self.entries], file, indent=2
             )
