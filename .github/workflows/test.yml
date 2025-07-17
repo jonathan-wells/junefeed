@@ -24,4 +24,3 @@ jobs:
 
       - name: Run unit tests
         run: uv run pytest ./tests
-        uses: ~/.local/state/junefeed/config.yaml
