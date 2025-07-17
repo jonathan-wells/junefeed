@@ -36,7 +36,7 @@ class Entry:
         """Initialize Entry instance."""
         self.feed = feed
         self.title = title
-        self.summary = self._parse_html(summary).strip()
+        self.summary = self.parse_entry_html(summary).strip()
         self.date = date
         self.link = link
         self.is_read = is_read
@@ -91,10 +91,11 @@ class Entry:
             else:
                 return f'[#908caa]{self.feed:>{pad}}: [#6e6a86] {self.title}[/]'
 
-    def _parse_html(self, data: str) -> str:
+    @staticmethod
+    def parse_entry_html(data: str) -> str:
         """Converts input HTML data into Rich-formatted string."""
         if not ('<' in data and '</' in data):
-            return data
+            return data + '\n\n'
         parser = RSSEntryParser()
         parser.feed(data)
         return parser.string
