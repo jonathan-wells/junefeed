@@ -1,8 +1,11 @@
 import pytest
 import tempfile
 import os
+import json
+
 import yaml
-from junefeed.feed import Entry
+
+from junefeed.feed import Entry, EntryCollection, Feed
 from junefeed.config import Config
 
 
@@ -30,6 +33,25 @@ def mock_config_file():
     os.unlink(temp_config_path)
 
 
+@pytest.fixture(autouse=True)
+def mock_history_file(json_entry):
+    """Fixture that provides a temporary history file and patches Config.history_file"""
+    test_history = [json_entry]
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as file:
+        json.dump(test_history, file)
+        temp_history_path = file.name
+
+    # Store original and patch
+    original_history_file = Config.history_file
+    Config.history_file = temp_history_path
+
+    yield Config.history_file  # Execute the tests with the patched config file
+
+    # Cleanup
+    Config.history_file = original_history_file
+    os.unlink(temp_history_path)
+
+
 @pytest.fixture
 def entry():
     return Entry(
@@ -42,7 +64,7 @@ def entry():
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def json_entry():
     return {
         'feed': 'nature',
@@ -52,6 +74,19 @@ def json_entry():
         'date': '15/07/2025',
         'is_read': True,
     }
+
+
+@pytest.fixture
+def feed(entry):
+    """Fixture that provides a dummy Feed instance."""
+    test_feed = Feed(url='https://www.nature.com/nature.rss', name='nature')
+    test_feed._entries = [entry]
+
+
+@pytest.fixture
+def entry_collection(entry):
+    """Fixture that provides a dummy EntryCollection instance."""
+    return EntryCollection(entries=[entry])
 
 
 class TestEntry:
@@ -121,10 +156,67 @@ class TestEntry:
 
 
 class TestEntryCollection:
-    def test_ec(self):
-        assert True
+    """Tests for all EntryCollection methods."""
 
+    def test_from_cached(self):
+        """Test class method to generate from cached history."""
+        entry_collection = EntryCollection.from_cached()
+        assert isinstance(entry_collection, EntryCollection)
+        assert len(entry_collection.entries) == 1
+        assert entry_collection.entries[0].feed == 'nature'
 
-class TestFeed:
-    def test_ec(self):
-        assert True
+    @pytest.mark.asyncio
+    async def test_from_feed(self, monkeypatch, entry):
+        """Test class method to generate from feeds"""
+
+        @pytest.mark.asyncio
+        async def mock_refresh(self: EntryCollection):
+            # Instead of fetching data from real feed, just insert entry fixture.
+            entry.title = 'changed_test_title'
+            self.entries.insert(0, entry)
+
+        # Replace EntryCollection.refresh method with mocked version
+        monkeypatch.setattr(EntryCollection, 'refresh', mock_refresh)
+        entry_collection = await EntryCollection.from_feeds()
+
+        assert isinstance(entry_collection, EntryCollection)
+        assert len(entry_collection.entries) == 2  # 1 from history, 1 from feed.
+        assert entry_collection.entries[0].title == 'changed_test_title'
+
+    @pytest.mark.asyncio
+    async def test_refresh(self, monkeypatch, entry, entry_collection):
+        """Test refresh entry collection."""
+
+        @pytest.mark.asyncio
+        async def mock_get_entries(self: Feed):
+            # Mocks Feed.get_entries by returning list containing entry fixture.
+            entry.title = 'another new title'
+            self._entries = [entry]
+            return self._entries
+
+        # Replace EntryCollection.refresh method with mocked version
+        monkeypatch.setattr(Feed, 'get_entries', mock_get_entries)
+        await entry_collection.refresh()
+        assert isinstance(entry_collection, EntryCollection)
+        assert len(entry_collection.entries) == 2  # 1 from history, 1 from feed.
+        assert entry_collection.entries[0].title == 'another new title'
+
+    def test_cache_entries(self, entry, entry_collection):
+        """Test writing of entry data to history file."""
+        entry_collection.cache_entries()
+        with open(Config.history_file, 'r') as file:
+            data = json.load(file)
+            assert data[0]['title'] == entry.title
+
+    def test_append(self, entry_collection, entry):
+        """Test that append adds to entries list."""
+        start_len = len(entry_collection.entries)
+        entry_collection.append(entry)
+        assert len(entry_collection.entries) == start_len + 1
+
+    def test_pop(self, entry_collection):
+        """Test that pop removes an item from entries list."""
+        start_len = len(entry_collection.entries)
+        popped = entry_collection.pop()
+        assert isinstance(popped, Entry)
+        assert len(entry_collection.entries) == start_len - 1
