@@ -3,6 +3,9 @@ name = "junefeed"
 version = "0.1.0"
 description = "A statefull RSS reader."
 readme = "README.md"
+authors = [
+    { name = "Jonathan Wells", email = "jonwells90@gmail.com" }
+]
 requires-python = ">=3.9"
 dependencies = [
     "feedparser>=6.0.11",
@@ -11,13 +14,16 @@ dependencies = [
     "textual>=3.4.0",
 ]
 
+[project.scripts]
+june = "junefeed:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build]
-include = ["junefeed"]
-
+# [tool.hatch.build]
+# include = ["junefeed"]
+#
 [dependency-groups]
 dev = [
     "pre-commit>=4.2.0",
@@ -28,3 +34,8 @@ dev = [
 
 [tool.ruff.format]
 quote-style = "single"
+
+[tool.uv.workspace]
+members = [
+    "tmp",
+]
