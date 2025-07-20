@@ -82,8 +82,8 @@ class Entry:
     def oneliner(self, pad: int = 0, highlighted: bool = False) -> str:
         """Return single-line string reflecting read/unread status."""
         if highlighted:
-            # dotfeed = '\u2022 ' + self.feed
-            dotfeed = '󰄛 ' + self.feed
+            dotfeed = '\u2022 ' + self.feed
+            # dotfeed = '󰄛 ' + self.feed
             if not self.is_read:
                 return f'[#f6c177]{dotfeed:>{pad}}:  {self.title}[/]'
             else:
@@ -105,7 +105,8 @@ class Entry:
 
     def __repr__(self) -> str:
         """Return Rich-formatted entry string."""
-        title = f'[#eb6f92 bold]{self.title:>10}[/]\n'
+        read_status = ' [#eb6f92]\u2713[/]' if self.is_read else ''
+        title = f'[#eb6f92 bold]{self.title:>10}[/]{read_status}\n'
         link = f'[#c4a7e7 italic underline]{self.link}[/]\n'
         return f'{title}\n{link}\n{self.summary}'
 
@@ -245,10 +246,6 @@ class Feed:
     def __str__(self):
         """Return Rich-formatted string of feed."""
         return f'[#31748f italic]{self.name:>10}[/]: {self.url}'
-
-    # async def __iter__(self) -> Iterator:
-    #     """Return iterator over entries."""
-    #     return iter(await self.get_entries())
 
 
 class RSSEntryParser(HTMLParser):

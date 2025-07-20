@@ -127,15 +127,26 @@ class Junefeed(App):
                 await self.pop_screen()
             elif event.key == 'o':
                 self.open_entry_link()
+            elif event.key == 'm':
+                if self.screen.entry.is_read:
+                    self.screen.mark_unread()
+                else:
+                    self.screen.mark_read()
             elif event.key == 'q':
+                ec_screen = self.get_screen('entry_collection', EntryCollectionScreen)
+                if ec_screen.current_entry.is_read:
+                    ec_screen.mark_read()
                 await self.pop_screen()
         elif isinstance(self.screen, EntryCollectionScreen):
             if event.key == 'o':
                 await self.switch_to_entry()
             elif event.key == 'm':
-                self.screen.mark_read()
-            elif event.key == 'u':
-                self.screen.mark_unread()
+                if self.screen.current_entry.is_read:
+                    self.screen.mark_unread()
+                else:
+                    self.screen.mark_read()
+            # elif event.key == 'u':
+            #     self.screen.mark_unread()
             elif event.key == 't':
                 await self.toggle_read()
             elif event.key == 'q':
@@ -232,13 +243,13 @@ class EntryCollectionScreen(Screen):
 
     def on_key(self, event: events.Key) -> None:
         """Key-bindings for EntryCollectionScreen."""
-        if event.key == 'j':
+        if event.key == 'j' or event.key == 'down':
             self.idx += 1
             self.highlight_current()
             if self.idx >= 15:
                 self.scroll_down()
 
-        elif event.key == 'k':
+        elif event.key == 'k' or event.key == 'up':
             self.idx -= 1
             self.highlight_current()
             if self.idx <= self.nwidgets - 15:
@@ -324,6 +335,16 @@ class SingleEntryScreen(Screen):
         self.screen.styles.background = '#191724'
         self.widget = Static(str(self.entry))
         yield self.widget
+
+    def mark_read(self) -> None:
+        """Mark the entry as read."""
+        self.entry.mark_read()
+        self.widget.update(str(self.entry))
+
+    def mark_unread(self) -> None:
+        """Mark the entry as unread."""
+        self.entry.mark_unread()
+        self.widget.update(str(self.entry))
 
 
 class FeedScreen(Screen):
