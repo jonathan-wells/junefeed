@@ -1,14 +1,23 @@
-import os
+from pathlib import Path
+import json
 import yaml
 
 
 class Config:
-    config_file = os.environ['HOME'] + '/.local/state/junefeed/config.yaml'
-    history_file = os.environ['HOME'] + '/.local/state/junefeed/history.json'
-
     def __init__(self):
-        with open(self.config_file, 'r') as config_file:
-            self._config = yaml.safe_load(config_file)
+        config_dir = Path.home() / '.config' / 'junefeed'
+        config_dir.mkdir(exist_ok=True, parents=True)
+        self.config_file = config_dir / 'config.yaml'
+
+        if not self.config_file.exists():
+            self._config = {'feeds': []}
+            with open(self.config_file, 'w') as file:
+                yaml.dump(self._config, file)
+        else:
+            with open(self.config_file, 'r') as file:
+                self._config = yaml.safe_load(file)
+        assert isinstance(self._config, dict), self._config
+
         self.feeds = {
             feed['name']: feed['url'] for feed in self._config.get('feeds', [])
         }
@@ -37,7 +46,19 @@ class Config:
             yaml.dump(self._config, file)
 
 
-def get_config():
-    """Get the Config instance."""
-    config = Config()
-    return config
+class History:
+    def __init__(self):
+        history_dir = Path.home() / '.local' / 'state' / 'junefeed'
+        history_dir.mkdir(exist_ok=True, parents=True)
+        self.history_file = history_dir / 'history.json'
+        if not self.history_file.exists():
+            self._history = []
+            with open(self.history_file, 'w') as file:
+                json.dump(self._history, file)
+        else:
+            with open(self.history_file, 'r') as file:
+                self._history = json.load(file)
+
+    def write_history(self):
+        with open(self.history_file, 'w') as file:
+            json.dump(self._history, file, indent=2)

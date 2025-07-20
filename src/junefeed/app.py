@@ -8,7 +8,7 @@ from textual import events, work
 
 
 from junefeed.feed import EntryCollection, Entry, Feed
-from junefeed.config import get_config
+from junefeed.config import Config
 
 
 class Junefeed(App):
@@ -183,7 +183,10 @@ class EntryCollectionScreen(Screen):
         else:
             self.visible_entries = self.entry_collection
         self.idx = idx
-        self._feedpad = max(len(feed) for feed in get_config().feeds.keys()) + 2
+
+        self._feedpad = 2 + max(
+            [len(feed) for feed in self.entry_collection.config.feeds.keys()], default=0
+        )
 
     @property
     def nwidgets(self) -> int:
@@ -326,7 +329,8 @@ class SingleEntryScreen(Screen):
 class FeedScreen(Screen):
     def __init__(self):
         super().__init__()
-        self.feeds = [Feed(url, name) for (name, url) in get_config().feeds.items()]
+        config = Config()
+        self.feeds = [Feed(url, name) for (name, url) in config.feeds.items()]
 
     def compose(self) -> ComposeResult:
         self.screen.styles.background = '#191724'

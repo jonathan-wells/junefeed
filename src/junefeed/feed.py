@@ -1,12 +1,15 @@
 import os
 import json
-from typing import TypeVar, Type
+from typing import TypeVar, Type, TYPE_CHECKING
 import asyncio
+
+if TYPE_CHECKING:
+    from feedparser.util import FeedParserDict
 
 from html.parser import HTMLParser
 import feedparser
 
-from junefeed.config import get_config
+from junefeed.config import Config, History
 
 
 EntryType = TypeVar('EntryType', bound='Entry')
@@ -124,29 +127,33 @@ class EntryCollection:
     def __init__(self, entries: list['Entry']) -> None:
         """Initialize EntryCollection."""
         self.entries = entries
+        self.config = Config()
+        self.history = History()
 
     @classmethod
-    def from_cached(cls: Type[EntryCollectionType]) -> EntryCollectionType:
+    def from_cached(
+        cls: Type[EntryCollectionType], history: History = History()
+    ) -> EntryCollectionType:
         """Initialize EntryCollection from locally cached RSS feed data."""
-        if os.path.exists(get_config().history_file):
-            with open(get_config().history_file, 'r') as file:
+        if os.path.exists(history.history_file):
+            with open(history.history_file, 'r') as file:
                 return cls([Entry.from_json_obj(entry) for entry in json.load(file)])
         else:
-            raise FileNotFoundError(
-                f'History file not found: {get_config().history_file}'
-            )
+            raise FileNotFoundError(f'History file not found: {history.history_file}')
 
     @classmethod
-    async def from_feeds(cls: Type[EntryCollectionType]) -> EntryCollectionType:
+    async def from_feeds(
+        cls: Type[EntryCollectionType], history: History = History()
+    ) -> EntryCollectionType:
         """Initialize EntryCollection directly from RSS feeds."""
-        cached_collection = EntryCollection.from_cached()
+        cached_collection = EntryCollection.from_cached(history)
         await cached_collection.refresh()
         return cls(cached_collection.entries)
 
     async def refresh(self) -> None:
         """Fetch new entries from source feeds."""
         cached_entry_titles = [entry.title for entry in self.entries]
-        for name, url in get_config().feeds.items():
+        for name, url in self.config.feeds.items():
             # Reverse list so most recent items in feed are displayed first.
             feed = Feed(url, name)
             feed_entries = await feed.get_entries()
@@ -157,7 +164,7 @@ class EntryCollection:
 
     def cache_entries(self) -> None:
         """Write entry data to history file."""
-        with open(get_config().history_file, 'w') as file:
+        with open(self.history.history_file, 'w') as file:
             json.dump(
                 [entry.json_serialize() for entry in self.entries], file, indent=2
             )
@@ -223,7 +230,7 @@ class Feed:
     async def get_entries(self) -> list['Entry']:
         """Returns list of entries populated with data from feed."""
         if len(self._entries) == 0:
-            rawfeed = await asyncio.to_thread(feedparser.parse, self.url)
+            rawfeed = await asyncio.to_thread(self._parse, self.url)
             if rawfeed.bozo:
                 raise ValueError(f'Could not access feed "{self.url}"')
             for entry in rawfeed.entries:
@@ -231,13 +238,17 @@ class Feed:
                 self._entries.append(Entry.from_json_obj(entry))
         return self._entries
 
+    def _parse(self, url) -> 'FeedParserDict':
+        """Wrapper around feedparser.parse method."""
+        return feedparser.parse(url)
+
     def __str__(self):
         """Return Rich-formatted string of feed."""
         return f'[#31748f italic]{self.name:>10}[/]: {self.url}'
 
-    async def __iter__(self):
-        """Return iterator over entries."""
-        return iter(await self.get_entries())
+    # async def __iter__(self) -> Iterator:
+    #     """Return iterator over entries."""
+    #     return iter(await self.get_entries())
 
 
 class RSSEntryParser(HTMLParser):
