@@ -1,59 +1,57 @@
 import pytest
 import tempfile
-import os
+from pathlib import Path
 import json
-
-import yaml
+from typing import Iterator
+from feedparser.util import FeedParserDict
 
 from junefeed.feed import Entry, EntryCollection, Feed
-from junefeed.config import Config
+from junefeed.config import Config, History
 
 
-@pytest.fixture(autouse=True, scope='module')
-def mock_config_file():
-    """Fixture that provides a temporary config file and patches Config.config_file"""
-    test_config = {
+@pytest.fixture
+def config():
+    """Mocked Config instance fixture."""
+    mock_config = Config()
+    temp_config_file = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.yaml', delete=False
+    )
+    mock_config.config_file = Path(temp_config_file.name)
+    mock_config._config = {
         'feeds': [
             {'name': 'nature', 'url': 'https://www.nature.com/nature.rss'},
         ]
     }
-
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as file:
-        yaml.dump(test_config, file)
-        temp_config_path = file.name
-
-    # Store original and patch
-    original_config_file = Config.config_file
-    Config.config_file = temp_config_path
-
-    yield  # Execute the tests with the patched config file
-
-    # Cleanup
-    Config.config_file = original_config_file
-    os.unlink(temp_config_path)
+    mock_config.feeds = {'nature': 'https://www.nature.com/nature.rss'}
+    return mock_config
 
 
-@pytest.fixture(autouse=True)
-def mock_history_file(json_entry):
-    """Fixture that provides a temporary history file and patches Config.history_file"""
-    test_history = [json_entry]
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as file:
-        json.dump(test_history, file)
-        temp_history_path = file.name
-
-    # Store original and patch
-    original_history_file = Config.history_file
-    Config.history_file = temp_history_path
-
-    yield Config.history_file  # Execute the tests with the patched config file
-
-    # Cleanup
-    Config.history_file = original_history_file
-    os.unlink(temp_history_path)
+@pytest.fixture
+def history():
+    """Mocked History instance fixture."""
+    mock_history = History()
+    mock_history._history = [
+        {
+            'feed': 'nature',
+            'title': 'test',
+            'summary': 'abstract goes here',
+            'link': 'www.nature.com',
+            'date': '15/07/2025',
+            'is_read': True,
+        }
+    ]
+    temp_history_file = tempfile.NamedTemporaryFile(
+        mode='w', suffix='.json', delete=False
+    )
+    mock_history.history_file = Path(temp_history_file.name)
+    with open(mock_history.history_file, 'w') as file:
+        json.dump(mock_history._history, file)
+    return mock_history
 
 
 @pytest.fixture
 def entry():
+    """Mocked Entry instance fixture."""
     return Entry(
         feed='nature',
         title='test',
@@ -64,8 +62,26 @@ def entry():
     )
 
 
+@pytest.fixture
+def entry_collection(entry, config, history):
+    """Mocked EntryCollection instance fixture."""
+    mock_entry_collection = EntryCollection(entries=[entry])
+    mock_entry_collection.config = config
+    mock_entry_collection.history = history
+    return mock_entry_collection
+
+
+@pytest.fixture
+def feed(entry):
+    """Mocked Feed instance fixture."""
+    mock_feed = Feed(url='https://www.nature.com/nature.rss', name='nature')
+    mock_feed._entries = [entry]
+    return mock_feed
+
+
 @pytest.fixture()
 def json_entry():
+    """JSON entry data fixture."""
     return {
         'feed': 'nature',
         'title': 'test',
@@ -74,19 +90,6 @@ def json_entry():
         'date': '15/07/2025',
         'is_read': True,
     }
-
-
-@pytest.fixture
-def feed(entry):
-    """Fixture that provides a dummy Feed instance."""
-    test_feed = Feed(url='https://www.nature.com/nature.rss', name='nature')
-    test_feed._entries = [entry]
-
-
-@pytest.fixture
-def entry_collection(entry):
-    """Fixture that provides a dummy EntryCollection instance."""
-    return EntryCollection(entries=[entry])
 
 
 class TestEntry:
@@ -158,16 +161,16 @@ class TestEntry:
 class TestEntryCollection:
     """Tests for all EntryCollection methods."""
 
-    def test_from_cached(self):
+    def test_from_cached(self, history):
         """Test class method to generate from cached history."""
-        entry_collection = EntryCollection.from_cached()
+        entry_collection = EntryCollection.from_cached(history)
         assert isinstance(entry_collection, EntryCollection)
         assert len(entry_collection.entries) == 1
         assert entry_collection.entries[0].feed == 'nature'
 
     @pytest.mark.asyncio
-    async def test_from_feed(self, monkeypatch, entry):
-        """Test class method to generate from feeds"""
+    async def test_from_feed(self, monkeypatch, entry, history):
+        """Test EntryCollection classmethod to generate from refreshed feeds."""
 
         @pytest.mark.asyncio
         async def mock_refresh(self: EntryCollection):
@@ -177,7 +180,7 @@ class TestEntryCollection:
 
         # Replace EntryCollection.refresh method with mocked version
         monkeypatch.setattr(EntryCollection, 'refresh', mock_refresh)
-        entry_collection = await EntryCollection.from_feeds()
+        entry_collection = await EntryCollection.from_feeds(history)
 
         assert isinstance(entry_collection, EntryCollection)
         assert len(entry_collection.entries) == 2  # 1 from history, 1 from feed.
@@ -194,7 +197,7 @@ class TestEntryCollection:
             self._entries = [entry]
             return self._entries
 
-        # Replace EntryCollection.refresh method with mocked version
+        # Replaces EntryCollection.refresh method with mocked version
         monkeypatch.setattr(Feed, 'get_entries', mock_get_entries)
         await entry_collection.refresh()
         assert isinstance(entry_collection, EntryCollection)
@@ -204,7 +207,7 @@ class TestEntryCollection:
     def test_cache_entries(self, entry, entry_collection):
         """Test writing of entry data to history file."""
         entry_collection.cache_entries()
-        with open(Config.history_file, 'r') as file:
+        with open(entry_collection.history.history_file, 'r') as file:
             data = json.load(file)
             assert data[0]['title'] == entry.title
 
@@ -220,3 +223,55 @@ class TestEntryCollection:
         popped = entry_collection.pop()
         assert isinstance(popped, Entry)
         assert len(entry_collection.entries) == start_len - 1
+
+    def test_iter(self, entry_collection):
+        eciterator = iter(entry_collection)
+        assert isinstance(eciterator, Iterator)
+        assert isinstance(next(eciterator), Entry)
+        # Should fail because entry_collection has only one entry.
+        with pytest.raises(StopIteration):
+            next(eciterator)
+
+    def test_len(self, entry_collection, entry):
+        """Test that __len__ returns number of entries in collection."""
+        assert len(entry_collection) == 1
+        entry_collection.entries.append(entry)
+        assert len(entry_collection) == 2
+
+    def test_get_item(self, entry_collection):
+        """Test that __getitem__ returns correct entry."""
+        assert entry_collection[0].title == 'test'
+        with pytest.raises(IndexError):
+            # Should fail because entry_collection has only one entry.
+            entry_collection[1]
+
+
+class TestFeed:
+    """Tests for all Feed methods."""
+
+    @pytest.mark.asyncio
+    async def test_get_entries(self, monkeypatch, feed, json_entry, entry):
+        """Test that entries are correctly parsed from output of feedparser."""
+
+        def mock_parse(*_):
+            """Mocks valid return from feedparser.parse"""
+            return FeedParserDict(bozo=False, entries=[json_entry])
+
+        def mock_bozo_parse(*_):
+            """Mocks failed return from feedparser.parse"""
+            return FeedParserDict(bozo=True)
+
+        monkeypatch.setattr(Feed, '_parse', mock_parse)
+        feed = Feed('test_url', 'test_name')
+        entries = await feed.get_entries()
+        assert entries[0].title == entry.title
+        feed = Feed('test_url', 'test_name')
+        monkeypatch.setattr(Feed, '_parse', mock_bozo_parse)
+        with pytest.raises(ValueError):
+            entries = await feed.get_entries()
+
+    def test_str(self, feed):
+        """Test that __str__ returns a string containg name and url."""
+        feedstring = str(feed)
+        assert feed.url in feedstring
+        assert feed.name in feedstring
