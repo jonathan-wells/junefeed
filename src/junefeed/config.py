@@ -31,7 +31,8 @@ class Config:
 
     def remove_feed(self, name: str):
         if name not in self.feeds:
-            return
+            raise KeyError(f'"{name}" was found in feed list')
+
         self.feeds.pop(name)
         idx = 0
         while idx < len(self._config['feeds']):
