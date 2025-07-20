@@ -34,6 +34,7 @@ def parse_args():
     parser_remove.add_argument(
         '-n', '--name', type=str, required=True, help='the unique name of the feed'
     )
+    subparser.add_parser('keys', help='Show key bindings')
     return parser.parse_args()
 
 
@@ -45,6 +46,18 @@ def main():
         config.add_feed(args.name, args.url)
     elif args.command == 'remove':
         config.remove_feed(args.name)
+    elif args.command == 'keys':
+        print(
+            '\nKey bindings:\n\n'
+            '  j,\u2193:\tScroll down\n'
+            '  k,\u2191:\tScroll up\n'
+            '    o:\tOpen entry/link\n'
+            '    m:\tMark entry as read or unread\n'
+            '    t:\tToggle display of read entries\n'
+            '    r:\tRefresh feeds\n'
+            '    f:\tShow feed list\n'
+            '    q:\tReturn to previous screen or quit'
+        )
     if not args.command:
         app = Junefeed()
         app.run()
