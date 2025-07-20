@@ -15,5 +15,18 @@ uv tool install junefeed
 
 ## Usage
 ```
-june
+$ june -h
+usage: june [-h] [-v] {add,remove,keys} ...
+
+Junefeed - A simple RSS feed reader
+
+optional arguments:
+  -h, --help         show this help message and exit
+  -v, --version      Show the version of Junefeed
+
+commands:
+  {add,remove,keys}  Available commands
+    add              Add a new feed
+    remove           Remove a feed
+    keys             Show key bindings
 ```
