@@ -9,7 +9,7 @@ def parse_args():
         '-v',
         '--version',
         action='version',
-        version='Junefeed v0.1.0',
+        version='Junefeed v0.2.0',
         help='Show the version of Junefeed',
     )
     subparser = parser.add_subparsers(

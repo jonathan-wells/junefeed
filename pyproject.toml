@@ -1,6 +1,6 @@
 [project]
 name = "junefeed"
-version = "0.1.0"
+version = "v0.2.0"
 description = "A statefull RSS reader."
 readme = "README.md"
 authors = [
