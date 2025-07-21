@@ -6,7 +6,7 @@ from typing import Iterator
 from feedparser.util import FeedParserDict
 
 from junefeed.feed import Entry, EntryCollection, Feed
-from junefeed.config import Config, History
+from junefeed.state import Config, History
 
 
 @pytest.fixture
