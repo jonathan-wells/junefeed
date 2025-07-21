@@ -10,7 +10,8 @@ topics important to you. It is inspired by similar terminal-based RSS readers su
 ## Installation
 ```
 git clone https://github.com/jonathan-wells/junefeed
-uv tool install junefeed
+cd junefeed
+uv tool install .
 ```
 
 ## Usage

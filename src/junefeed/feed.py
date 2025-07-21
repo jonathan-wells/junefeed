@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 from html.parser import HTMLParser
 import feedparser
 
-from junefeed.config import Config, History
+from junefeed.state import Config, History
 
 
 EntryType = TypeVar('EntryType', bound='Entry')

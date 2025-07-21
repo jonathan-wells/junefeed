@@ -8,7 +8,7 @@ from textual import events, work
 
 
 from junefeed.feed import EntryCollection, Entry, Feed
-from junefeed.config import Config
+from junefeed.state import Config, Keybindings
 
 
 class Junefeed(App):
@@ -25,6 +25,12 @@ class Junefeed(App):
         ('c', 'push_screen("entry_collection")'),
         ('f', 'push_screen("feeds")'),
     ]
+
+    def __init__(self) -> None:
+        """Initialize a new Junefeed app instance."""
+        super().__init__()
+        self.config = Config()
+        self.keybindings = Keybindings()
 
     async def on_mount(self) -> None:
         self.install_screen(EntryCollectionScreen(), 'entry_collection')
@@ -107,6 +113,7 @@ class Junefeed(App):
         self.pop_screen()
         await self.push_screen(entry_collection_screen)
         entry_collection_screen.widgets[0].scroll_to_widget(
+            # TODO: edit this to avoid magic-number scroll threshold
             entry_collection_screen.widgets[
                 min(entry_collection_screen.nwidgets - 1, new_idx + 15)
             ],
@@ -120,40 +127,45 @@ class Junefeed(App):
         Attributes:
             event: an individual key-press event.
         """
-        if event.key == 'r':
-            await self.refresh_feeds()
         if isinstance(self.screen, SingleEntryScreen):
-            if event.key == 'c':
-                await self.pop_screen()
-            elif event.key == 'o':
+            scname = 'single_entry_screen'
+
+            if event.key in self.keybindings.get_key(scname, 'open'):
                 self.open_entry_link()
-            elif event.key == 'm':
+
+            elif event.key in self.keybindings.get_key(scname, 'mark_read_unread'):
                 if self.screen.entry.is_read:
                     self.screen.mark_unread()
                 else:
                     self.screen.mark_read()
-            elif event.key == 'q':
+
+            elif event.key in self.keybindings.get_key(scname, 'previous_screen'):
                 ec_screen = self.get_screen('entry_collection', EntryCollectionScreen)
                 if ec_screen.current_entry.is_read:
                     ec_screen.mark_read()
                 await self.pop_screen()
+
         elif isinstance(self.screen, EntryCollectionScreen):
-            if event.key == 'o':
+            scname = 'entry_collection_screen'
+            if event.key in self.keybindings.get_key(scname, 'open'):
                 await self.switch_to_entry()
-            elif event.key == 'm':
+
+            elif event.key in self.keybindings.get_key(scname, 'mark_read_unread'):
                 if self.screen.current_entry.is_read:
                     self.screen.mark_unread()
                 else:
                     self.screen.mark_read()
-            # elif event.key == 'u':
-            #     self.screen.mark_unread()
-            elif event.key == 't':
+
+            elif event.key in self.keybindings.get_key(scname, 'hide_read'):
                 await self.toggle_read()
-            elif event.key == 'q':
+
+            elif event.key in self.keybindings.get_key(scname, 'quit'):
                 self.screen.entry_collection.cache_entries()
                 self.exit()
+
         elif isinstance(self.screen, FeedScreen):
-            if event.key == 'q':
+            scname = 'feed_screen'
+            if event.key in self.keybindings.get_key(scname, 'previous_screen'):
                 self.get_screen(
                     'entry_collection', EntryCollectionScreen
                 ).entry_collection.cache_entries()
@@ -177,7 +189,7 @@ class EntryCollectionScreen(Screen):
     def __init__(
         self,
         entry_collection: Optional['EntryCollection'] = None,
-        display_read: bool = False,
+        display_read: bool = True,
         idx: int = 0,
     ) -> None:
         """Initialize new EntryCollectionScreen instance."""
@@ -198,6 +210,7 @@ class EntryCollectionScreen(Screen):
         self._feedpad = 2 + max(
             [len(feed) for feed in self.entry_collection.config.feeds.keys()], default=0
         )
+        self.keybindings = Keybindings()
 
     @property
     def nwidgets(self) -> int:

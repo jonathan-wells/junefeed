@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from junefeed.config import Config
+from junefeed.state import Config
 from junefeed.app import Junefeed
 
 
